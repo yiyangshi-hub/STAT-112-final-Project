@@ -1,0 +1,381 @@
+---
+title: "Airbnb in NYC: location, minimum nights, and reviews as factors for its prices"
+author: "Yiyang Shi"
+output: 
+  html_document:
+    keep_md: TRUE
+    toc: TRUE
+    toc_float: TRUE
+    df_print: paged
+    code_download: true
+---
+
+
+## Introduction
+
+|         This project focuses on the price per night of the houses in Airbnb, specifically in the New York City. I will try to find out the factors that can cause effects on the price of the houses in New York City. New York City's house price is known to be extremely high, especially those located in Manhattan area. Similarly, if we are looking for a short-term lease on Airbnb, the price is also quite astonishing. In the following analysis, I will evaluate the price of the houses on the price per night scale. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyr)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(lubridate)     # for date manipulation
+library(openintro)     # for the abbr2state() function
+library(maps)          # for map data
+library(ggmap)         # for mapping points on maps
+library(gplots)        # for col2hex() function
+library(RColorBrewer)  # for color palettes
+library(sf)            # for working with spatial data
+library(leaflet)       # for highly customizable mapping
+library(ggthemes)      # for more themes (including theme_map())
+library(gt)            # for creating nice tables
+library(geojsonio)
+library(tigris)
+library(DT)
+```
+
+```{r}
+airbnb_nyc_overall = read.csv("D:\\STAT 112\\STAT 112 Project\\listings.csv.gz")
+airbnb_nyc_specified = read.csv("D:\\STAT 112\\STAT 112 Project\\listings.csv")
+airbnb_nyc_geo <- geojson_read("D:\\STAT 112\\STAT 112 Project\\neighbourhoods.geojson", what = "sp")
+```
+
+
+## Data collection
+
+|       Those three datasets were collected from the official website of Airbnb. It has a section to download the data, which opens to the public. The [website](http://insideairbnb.com/get-the-data.html) includes the data for states, and popular cities in the U.S. I chose the dataset of the New York City, since it has a great amount of data to utilize, so that the analysis of the price might be useful to generalize to other popular cities. The datasets which I downloaded from the websites are the "csv" files and a "geojson" file. 
+  
+|       By collecting these datasets, I plan to investigate the factors which can affect the price of the houses in New York City. I will evaluate three aspects: locations of the houses, minimum number of nights and reviews per month. 
+    
+    
+## Location and price
+
+
+### Overview of the price distribution
+
+```{r}
+
+# airbnb_modified is a dataset, created to join with airbnb_geo
+airbnb_modified <-
+  airbnb_nyc_specified %>%
+  group_by(neighbourhood) %>%
+  summarise(n = n(),
+            price_avg = sum(price)/n)
+
+
+# airbnb_merge is a sp dataframe used for mapping
+airbnb_merge <-
+geo_join(airbnb_nyc_geo, 
+         airbnb_modified, 
+         by = "neighbourhood")
+
+
+pal <- colorNumeric("viridis", 
+                     domain = airbnb_merge$price_avg) 
+
+# A leaflet map which colors different neighborhoods by their average price/night
+leaflet(airbnb_merge) %>% 
+  addTiles() %>% 
+  addPolygons(
+    stroke = FALSE, 
+    fillColor = ~pal(price_avg), 
+    fillOpacity = 0.7, 
+    smoothFactor = 0.5, 
+    highlight = highlightOptions(weight = 5, 
+                                 color = "black",
+                                 fillOpacity = 0.9,
+                                 bringToFront = FALSE), 
+    popup = ~paste(neighbourhood,": ",
+                   round(price_avg, 2),
+                   sep="")) %>% 
+  addLegend(
+    title = "Average price per night",
+    data = airbnb_merge,
+    values = airbnb_merge$price_avg,
+    pal = pal, 
+    position = "bottomright")
+  
+```
+    
+    
+    
+|       The map above is an overview of the price distribution among different neighborhoods. By coloring them from dark to light, we can see that Woodrow and Fort Wadsworth have significantly high average price per night. Their average price per night are 700 and 800 dollars. Besides, Prince's Bay, Sea Gate, Tribeca, Financial District, Flatiron District, and Briarwood all have the average price per night around 370 dollars. We will make further analysis on those neighborhoods later on, as those neighborhoods might include some extreme values which can increase the average price. 
+    
+|       However, this leaflet map is a mixture of two room types, which can be misleading, since private rooms are much cheaper than the entire apartments most of the time. Also, the average price per night is not calculated based on the weight of each room type. In this way, we cannot make any further explanations or deductions based on this map. It can just provide the general information about the price in New York City. 
+    
+    
+    
+### Analysis of private room
+    
+```{r}
+airbnb_modified_roomP <-
+  airbnb_nyc_specified %>%
+  filter(room_type == "Private room") %>% 
+  group_by(neighbourhood) %>%
+  summarise(n = n(),
+            price_avg = sum(price)/n)
+
+
+
+airbnb_merge <-
+  geo_join(airbnb_nyc_geo, 
+           airbnb_modified_roomP, 
+           by = "neighbourhood")
+
+
+
+pal <- colorNumeric("viridis", 
+                     domain = airbnb_merge$price_avg) 
+
+# A leaflet map which colors different neighborhoods by their average price/night of private room
+leaflet(airbnb_merge) %>% 
+  addTiles() %>% 
+  addPolygons(
+    stroke = FALSE, 
+    fillColor = ~pal(price_avg), 
+    fillOpacity = 0.7, 
+    smoothFactor = 0.5, 
+    highlight = highlightOptions(weight = 5, 
+                                 color = "black",
+                                 fillOpacity = 0.9,
+                                 bringToFront = FALSE), 
+    popup = ~paste(neighbourhood,": ",
+                   round(price_avg, 2),
+                   sep="")) %>% 
+  addLegend(
+    title = "Average price per night of private room",
+    data = airbnb_merge,
+    values = airbnb_merge$price_avg,
+    pal = pal, 
+    position = "bottomright"
+  )
+```
+    
+    
+    
+|       From this leaflet map, we can see several neighborhoods with outstanding price. The average price per night in Midtown and Briarwood are the highest, which are about 420 dollars per night. Riverdale and Jamaica Estate are about 360 dollars per night. The private rooms at downtown Manhattan are about 200 dollars per night. There is also an interesting pattern for the price distribution of private room in Manhattan area. The price per night of the private room increase from uptown area Washington Heights to downtown Manhattan Lower East Side. However, Midtown and Flatiron District stands out from the Manhattan area. 
+    
+    
+    
+#### Extreme values affect the average price
+    
+```{r}
+airbnb_gt <- 
+  airbnb_nyc_specified %>% 
+  filter(room_type == "Private room", 
+         neighbourhood == "Midtown", 
+         price > 1000) %>% 
+  select(name, price, availability_365) %>% 
+  arrange(desc(price))
+
+airbnb_gt %>% 
+  gt(
+    groupname_col = airbnb_nyc_specified$name, 
+  ) %>% 
+  tab_header(
+    title = "Extreme price values in the dataset"
+  ) %>% 
+  cols_label(
+    name = md("Name"),
+    price = md("Price"),
+    availability_365 = md("Days available per year")
+    )
+```
+    
+    
+    
+    
+|       In the table above, we filtered out several extreme values from the data, and find out that those are not meaningful data points. If we take a look at the price and it availability, we can see that those with prices of 9999 or 10000 dollars are not available at all for the guest to book. In this way, these data points might be the influential points which increase the average price of the private room in Midtown area. However, if we exclude those data points, the general increasing trend from uptown to downtown becomes reasonable and meaningful. 
+    
+    
+### Analysis of entire home and apartment
+    
+```{r}
+airbnb_modified_roomE <-
+  airbnb_nyc_specified %>%
+  filter(room_type == "Entire home/apt") %>% 
+  group_by(neighbourhood) %>%
+  summarise(n = n(),
+            price_avg = sum(price)/n)
+
+
+
+airbnb_merge <-
+  geo_join(airbnb_nyc_geo, 
+           airbnb_modified_roomE, 
+           by = "neighbourhood")
+
+
+
+pal <- colorNumeric("viridis", 
+                     domain = airbnb_merge$price_avg) 
+
+# A leaflet map which colors different neighborhoods by their average price/night of Entire home/apt
+leaflet(airbnb_merge) %>% 
+  addTiles() %>% 
+  addPolygons(
+    stroke = FALSE, 
+    fillColor = ~pal(price_avg), 
+    fillOpacity = 0.7, 
+    smoothFactor = 0.5, 
+    highlight = highlightOptions(weight = 5, 
+                                 color = "black",
+                                 fillOpacity = 0.9,
+                                 bringToFront = FALSE), 
+    popup = ~paste(neighbourhood,": ",
+                   round(price_avg, 2),
+                   sep="")) %>% 
+  addLegend(
+    title = "Average price per night of Entire home/apt",
+    data = airbnb_merge,
+    values = airbnb_merge$price_avg,
+    pal = pal, 
+    position = "bottomright"
+  )
+```
+    
+
+
+|       As for the average price per night of entire apartment, the trend is quite obvious and we do not need any further manipulation on the data. If we take a look at the Manhattan area, the average price per night increase from 136.64 dollars at uptown Washington Heights, to 479.27 dollars at downtown Financial District. There are  several other neighborhoods with outstanding prices, especially Woodrow, Fort Wadsworth and Fieldston. 
+
+|       As a result, there is a relationship between the average price per night and the location of the corresponding house. Specifically, the average price per night keeps increasing as we approach the downtown Manhattan from uptown. 
+
+    
+    
+## Minimum number of nights and price
+    
+```{r}
+airbnb_nyc_specified %>% 
+  filter(room_type == c("Entire home/apt", "Private room")) %>% 
+  ggplot(aes(x = minimum_nights, 
+             y = price, 
+             color = room_type)) +
+  geom_point() +
+  facet_wrap(vars(room_type)) +
+  scale_color_viridis_d(
+    end = 0.5
+  ) +
+  labs(
+    title = "Relationship between price and minimum number of nights", 
+    subtitle = "Room types has been considered seperately", 
+    x = "Minimum number of nights", 
+    y = "Price"
+  ) +
+  theme(
+    legend.title = element_blank()
+  )
+```
+    
+    
+|       Neglecting the extreme values, we can see a trend that as the minimum nights increase, price is decreasing, for both entire apartment and private room. However, it was not clear since those points are quite condense at the corner of the graph, so we can transform the x and y axes on log scale.
+    
+```{r}
+airbnb_nyc_specified %>% 
+  filter(room_type == c("Entire home/apt", "Private room")) %>% 
+  ggplot(aes(x = minimum_nights, 
+             y = price, 
+             color = room_type)) +
+  geom_point(alpha = 0.05) +
+  geom_smooth() +
+  facet_wrap(vars(room_type)) +
+  theme(legend.title = element_blank()) +
+  scale_x_log10() +
+  scale_y_log10(labels = scales::dollar_format(accuracy = 1)) +
+  scale_color_viridis_d(
+    end = 0.5
+  ) +
+  labs(
+  title = "Relationship between price and minimum number of nights", 
+  subtitle = "X and Y axes are on log scales", 
+  x = "Minimum number of nights", 
+  y = ""
+  )
+```
+    
+
+  
+|       After we transformed the x and y axes on the log scale, the relationship is quite obvious for private room section. The price per night decreases as the minimum number of nights increases. The trend is quite reasonable for private room. As the log of minimum nights increases, the price drops. We can guess that most of the host or the Airbnb official wants to lower their price by increasing the minimum nights, which makes the price looks better and more attractive to the customers. 
+  
+|       However, we cannot find that trend for the entire apartment section. Basically, the polynomial which we added is quite flat. In this way, the relationship between price and minimum nights may not exist in entire apartment section.
+  
+  
+
+## Number of reviews per month and price
+    
+```{r}
+airbnb_nyc_specified %>% 
+  filter(room_type == c("Private room", "Entire home/apt"), 
+         reviews_per_month > 1.5) %>% 
+  ggplot(aes(x = reviews_per_month, 
+             y = price, 
+             color = room_type)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth() +
+  facet_wrap(vars(room_type)) +
+  theme(legend.title = element_blank()) +
+  scale_x_log10() +
+  scale_y_log10(labels = scales::dollar_format(accuracy = 1)) +
+  scale_color_viridis_d(end = 0.5) +
+  labs(
+  title = "Relationship between price and number of reviews per month", 
+  subtitle = "X and Y axes are on log scales", 
+  x = "Number of reviews per month", 
+  y = ""
+  )
+```
+
+    
+    
+|       The x and y axes above are also transformed on the log scale. If we compare the price per night and number of reviews per month, we can find out a decreasing pattern for the entire apartment section. As number of reviews per month increases, price decreases. In this way, we can guess that there is a relationship between price and reviews per month, however, we have no idea which one is the explanatory variable and which one is the response variable. The hosts may want to be a "superhost" and earn privileges by decreasing their price so that it looks more attractive to the customers, and the customers are more likely to give positive reviews to the host. If the hosts become a "superhost," guests are more willing to choose their houses, since they have good reputation, and the hosts with good reputations always give the customers a sense of security. This positive cycle will definitely bring the hosts plenty of profits. 
+    
+    
+##  Conclusion
+
+    
+|       In a conclusion, the price of the houses are related to their location, especially the neighborhoods, their minimum nights, and the number of reviews per month. 
+    
+|       From the beginning of this report, we can see the price distribution for both private room and entire apartment. The price increases from the uptown Manhattan to downtown Manhattan. In this way, my recommendation is that if the audience's preference on the price is between 50 and 100 dollars per night, those in Brooklyn, Bronx and Queens area are the best choices for them. If the audience prefers a higher price, especially those beyond 100 or 150, I would recommend the houses in uptown Manhattan and some of the Midtown Manhattan apartments. If the audience prefers a luxury living experience, I would recommend those at downtown Manhattan, and some at Midtown area, especially those close to the Central Park. Also, as the minimum number of nights grows, the price of the private room will also drop. 
+    
+|       If the audience is looking for entire apartment, and the price preference is under 100 dollars per night, I would recommend those in Staten Island, Brooklyn and Queens area. If the audience is looking for the price between 100 and 200 per night, uptown Manhattan would be one of their choices. Midtown and downtown Manhattan would be the best choice if the audience's budget is beyond 200 dollars per night. Also, we may want to consider the number of reviews per month, while we are choosing a entire apartment, since they are related as I evaluated above. 
+  
+|       The suggestions above are just some general information which may provide some orientations for audience's decision. If they have more specific questions about the price in different neighborhoods, they may want to use the interactive table below by searching key words or enter key words to the filters below each column.
+    
+```{r}
+airbnb_dt <- 
+  airbnb_nyc_specified %>%
+  group_by(neighbourhood, room_type) %>%
+  mutate(n = n(),
+         price_avg_unrounded= sum(price)/n,
+         price_avg = round(price_avg_unrounded, 2)
+         ) %>% 
+  select(neighbourhood_group, 
+         neighbourhood, 
+         price_avg, 
+         room_type) %>% 
+  distinct(neighbourhood_group, 
+           neighbourhood, 
+           price_avg, 
+           room_type)
+  
+
+datatable(
+  airbnb_dt, 
+  colnames = c("Neighborhood groups", 
+               "Neighborhoods", 
+               "Average Price", 
+               "Room types"), 
+  filter = "top"
+  )
+```
+    
+    
+    
+    
+    
+    
+
